@@ -1,0 +1,29 @@
+node_modules/
+dist/
+coverage/
+*.sqlite
+*.sqlite-wal
+.env
+.superpowers/
+.omc/
+.claude/
+
+# Tauri/Rust build
+web/src-tauri/target/
+web/src-tauri/gen/
+
+# User config
+agents.json
+conductor.db
+
+# IDE
+.idea/
+*.tsbuildinfo
+
+# Screenshots
+web/screenshots/
+/.claude/
+/.idea/
+/.omc/
+/.superpowers/
+/docs/superpowers/

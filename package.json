@@ -1,0 +1,24 @@
+{
+  "name": "conductor",
+  "version": "0.1.0",
+  "description": "Windows Agent Workbench — Multi-Agent terminal workspace",
+  "scripts": {
+    "start": "cd web && npm run tauri:dev",
+    "build": "cd web && npm run tauri:build",
+    "restart": "taskkill /f /im conductor.exe & cd web && npm run tauri:dev",
+    "kill": "taskkill /f /im conductor.exe",
+    "status": "tasklist /fi \"imagename eq conductor.exe\"",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
