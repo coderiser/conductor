@@ -25,6 +25,11 @@ export function setupIpcHandlers(daemonClient: DaemonClient, mainWindow: Browser
     daemonClient.send({ type: 'set-agent-session-id', ...args });
   });
 
+  // Window controls
+  ipcMain.on('window-close', () => {
+    mainWindow.close();
+  });
+
   // Event forwarding: daemon → main → renderer
   daemonClient.on('output', (msg: DaemonMessage) => {
     const m = msg as DaemonMessage & { type: 'output' };
