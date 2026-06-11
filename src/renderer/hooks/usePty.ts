@@ -10,8 +10,8 @@ import '@xterm/xterm/css/xterm.css';
 
 export function usePty(agent: string, cwd: string, container: HTMLDivElement | null, onReady?: (info: SessionInfo) => void, onExit?: (code: number) => void, onToken?: (count: number) => void, onStatus?: (status: string) => void, resumeId?: string, isRestore?: boolean, onSessionId?: (sid: string) => void) {
   const sessionRef = useRef<SessionInfo | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
-  const statusTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const statusTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const cleanupRef = useRef<Array<() => void>>([]);
 
   useEffect(() => {

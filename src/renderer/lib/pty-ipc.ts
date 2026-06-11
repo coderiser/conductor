@@ -1,4 +1,4 @@
-import type { ElectronAPI } from './global';
+import type { ElectronAPI } from '../global';
 
 function getAPI(): ElectronAPI {
   if (!window.electronAPI) {
