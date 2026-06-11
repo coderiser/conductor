@@ -7,6 +7,8 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    env_logger::init();
+    log::info!("Conductor starting...");
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
@@ -21,12 +23,17 @@ pub fn run() {
             commands::pty_commands::pty_kill,
             commands::pty_commands::pty_list,
             commands::pty_commands::pty_kill_all,
+            commands::pty_commands::pty_set_agent_session_id,
         ])
         .manage(pty::manager::PtyManager::new())
         .manage(db::store::DbStore::new().expect("Failed to init database"))
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
-                window.state::<pty::manager::PtyManager>().kill_all();
+                // Only kill all PTY sessions — do NOT save here.
+                // The frontend auto-save (debounced) + beforeunload flush handles persistence.
+                // Saving from mgr.list() can include stale sessions that the user already closed.
+                let mgr = window.state::<pty::manager::PtyManager>();
+                mgr.kill_all();
             }
         })
         .run(tauri::generate_context!())

@@ -3,13 +3,16 @@ use crate::pty::session::SessionInfo;
 
 #[tauri::command]
 pub async fn pty_spawn(
-    agent: String, cwd: String, cols: u16, rows: u16,
+    agent: String, cwd: String, cols: u16, rows: u16, agent_session_id: Option<String>, is_restore: Option<bool>,
     state: tauri::State<'_, PtyManager>, app: tauri::AppHandle,
 ) -> Result<SessionInfo, String> {
     let cwd = if cwd.is_empty() {
         std::env::current_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_default()
     } else { cwd };
-    state.spawn(agent, cwd, cols, rows, app)
+    let sid = agent_session_id.clone().unwrap_or_default();
+    let restore = is_restore.unwrap_or(false);
+    let info = state.spawn(agent, cwd, cols, rows, app, &sid, restore)?;
+    Ok(info)
 }
 
 #[tauri::command]
@@ -36,4 +39,9 @@ pub async fn pty_list(state: tauri::State<'_, PtyManager>) -> Result<Vec<Session
 pub async fn pty_kill_all(state: tauri::State<'_, PtyManager>) -> Result<(), String> {
     state.kill_all();
     Ok(())
+}
+
+#[tauri::command]
+pub async fn pty_set_agent_session_id(session_id: String, agent_session_id: String, state: tauri::State<'_, PtyManager>) -> Result<(), String> {
+    state.set_agent_session_id(&session_id, &agent_session_id)
 }

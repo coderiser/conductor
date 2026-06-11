@@ -107,7 +107,21 @@ Tauri 2.x (Rust)                     WebView2 (React)
 | `name` | 侧边栏显示名称 |
 | `command` | 可执行文件路径或命令名 |
 | `args` | 启动参数（可选） |
+| `create_template` | 新建会话模板，`{session_id}` 替换为 Conductor 生成的 UUID |
+| `resume_template` | 恢复会话模板，`{session_id}` 替换为 Agent 真实 session ID |
 | `builtin` | `true` = 始终显示；`false` = PATH 检测到才显示 |
+
+**会话恢复示例**：
+
+```json
+{
+  "id": "claude",
+  "create_template": "--session-id {session_id}",
+  "resume_template": "--resume {session_id}"
+}
+```
+- 新建时：`claude --session-id <uuid>`
+- 恢复时：`claude --resume <captured-id>`
 
 ---
 
@@ -115,6 +129,7 @@ Tauri 2.x (Rust)                     WebView2 (React)
 
 - **原生窗口** — Tauri 2.x + WebView2，非 Electron
 - **可配置 Agent** — `agents.json` 配置任意 Agent 类型和启动命令
+- **会话恢复** — Claude Code / OpenCode / Codex 关闭重开后自动恢复上次会话
 - **多 Agent PTY** — 同时运行 Claude Code / OpenCode / Codex / cmd.exe 及自定义 Agent
 - **动态格网布局** — 1=全屏, 2=双列, 3=2+1跨行, 4=2×2, 5=2×2+跨行, 6+=3列
 - **工作目录** — 新建终端时指定起始目录
@@ -136,6 +151,22 @@ Tauri 2.x (Rust)                     WebView2 (React)
 | Log | 时间戳事件流（启动/退出/终止） |
 
 ---
+
+## 会话恢复架构
+
+```
+spawn 前快照 → spawn Agent → 3s 延迟 → spawn 后快照 → diff 获取新 session ID
+                                                              ↓
+恢复 ← SQLite ← resumeId ← 前端 ← emit 事件 ←───────────────┘
+```
+
+| Agent | 发现机制 | 恢复命令 |
+|-------|---------|---------|
+| Claude Code | stdout 正则捕获 `Session ID: <uuid>` | `--resume {uuid}` |
+| OpenCode | `opencode db "SELECT id FROM session"` | `--session {ses_xxx}` |
+| Codex | 扫描 `~/.codex/sessions/` 目录 | `resume --last` |
+
+启动前快照确保并发安全：同一类型 Agent 短时间内启动多个，各自通过 before/after diff 精确定位自己的 session。
 
 ## 技术栈
 

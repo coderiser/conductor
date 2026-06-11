@@ -16,6 +16,9 @@ web/src-tauri/gen/
 agents.json
 conductor.db
 
+# Debug logs
+debug-spawn.log
+
 # IDE
 .idea/
 *.tsbuildinfo

@@ -13,12 +13,14 @@ pub struct SessionInfo {
     pub cwd: String,
     pub pid: u32,
     pub running: bool,
+    pub agent_session_id: String,
 }
 
 pub struct PtySession {
     pub id: String,
     pub agent: String,
     pub cwd: String,
+    pub agent_session_id: String,
     master: Box<dyn MasterPty + Send>,
     writer: Arc<Mutex<Option<Box<dyn std::io::Write + Send>>>>,
     alive: Arc<AtomicBool>,
@@ -27,34 +29,64 @@ pub struct PtySession {
 
 impl PtySession {
     pub fn spawn(
-        id: String, agent: String, cwd: String, cols: u16, rows: u16, app: AppHandle,
+        id: String, agent: String, cwd: String, cols: u16, rows: u16, app: AppHandle, agent_session_id: &str, is_restore: bool,
     ) -> Result<Self, String> {
         let pty_system = native_pty_system();
         let pair = pty_system
             .openpty(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })
             .map_err(|e| format!("PTY open failed: {}", e))?;
 
-        // Look up agent config for custom commands/args
+        // Look up agent config for custom commands/args/resume
         let agent_config = crate::config::agents::AgentsConfig::load();
         let agent_cmd = agent_config.find(&agent)
             .map(|a| a.command.clone())
             .unwrap_or_else(|| agent.clone());
-        let agent_args = agent_config.find(&agent)
+        let mut agent_args = agent_config.find(&agent)
             .map(|a| a.args.clone())
             .unwrap_or_default();
+        // DEBUG: log the session args
+        log::info!("[SPAWN] agent={} sid_param={:?} is_restore={} cwd={}", agent, agent_session_id, is_restore, cwd);
+        // Inject session ID: create_template for new, resume_template for restore
+        let mut template_applied = false;
+        if !agent_session_id.is_empty() {
+            if let Some(cfg) = agent_config.find(&agent) {
+                // Pick the correct template: never fall through from empty create to resume
+                let tmpl = if is_restore {
+                    &cfg.resume_template
+                } else {
+                    &cfg.create_template
+                };
+                log::info!("[SPAWN] template='{}' (create='{}' resume='{}')", tmpl, cfg.create_template, cfg.resume_template);
+                if !tmpl.is_empty() {
+                    let arg = tmpl.replace("{session_id}", agent_session_id);
+                    for a in arg.split_whitespace() { agent_args.push(a.to_string()); }
+                    template_applied = true;
+                    log::info!("[SPAWN] template_applied=true args={:?}", agent_args);
+                } else {
+                    log::info!("[SPAWN] template is EMPTY — no session flag will be added");
+                }
+            }
+        } else {
+            log::info!("[SPAWN] agent_session_id is EMPTY — skipping template");
+        }
 
         // Windows: always spawn via cmd.exe /k with explicit cd to set cwd
         let (binary, args): (String, Vec<String>) = if cfg!(windows) {
             let path = which::which(&agent_cmd).unwrap_or_else(|_| std::path::PathBuf::from(&agent_cmd));
             let resolved = path.to_string_lossy().to_string();
+            log::info!("[SPAWN] which({}) = {:?}, extension={:?}", agent_cmd, resolved, path.extension());
             // Build command line with agent + extra args
             let extra = if agent_args.is_empty() { String::new() } else { format!(" {}", agent_args.join(" ")) };
             match path.extension().and_then(|e| e.to_str()) {
                 Some("cmd") | Some("bat") => {
-                    ("cmd.exe".into(), vec!["/k".into(), format!("cd /d {} && call {}{}", cwd, resolved, extra)])
+                    let cmdline = format!("cd /d {} && call {}{}", cwd, resolved, extra);
+                    log::info!("[SPAWN] CMDLINE (call): {}", cmdline);
+                    ("cmd.exe".into(), vec!["/k".into(), cmdline])
                 }
                 _ => {
-                    ("cmd.exe".into(), vec!["/k".into(), format!("cd /d {} && {}{}", cwd, resolved, extra)])
+                    let cmdline = format!("cd /d {} && {}{}", cwd, resolved, extra);
+                    log::info!("[SPAWN] CMDLINE (direct): {}", cmdline);
+                    ("cmd.exe".into(), vec!["/k".into(), cmdline])
                 }
             }
         } else {
@@ -67,6 +99,7 @@ impl PtySession {
         let mut child = pair.slave.spawn_command(cmd)
             .map_err(|e| format!("Spawn {} failed: {}", agent, e))?;
         let pid = child.process_id().unwrap_or(0);
+        log::info!("[SPAWN] pid={} template_applied={} effective_sid={}", pid, template_applied, if template_applied { agent_session_id } else { "" });
         let master = pair.master;
         let reader = master.try_clone_reader()
             .map_err(|e| format!("Reader: {}", e))?;
@@ -96,7 +129,22 @@ impl PtySession {
                 serde_json::json!({"id": sid, "exitCode": 0}));
         }).map_err(|e| format!("Thread: {}", e))?;
 
-        Ok(Self { id, agent, cwd, master, writer, alive, handle: Some(handle) })
+        // Only store agent_session_id if a template was applied (e.g. --session-id was used).
+        // Otherwise keep empty so setAgentSessionId can capture the real ID from output.
+        let effective_sid = if template_applied { agent_session_id.to_string() } else { String::new() };
+
+        // DIAGNOSTIC: append spawn info to a debug file
+        if template_applied && !agent_session_id.is_empty() {
+            let debug_path = crate::config::config_dir().join("debug-spawn.log");
+            let entry = format!("{} | pid={} agent={} sid={} restore={} binary={} args={:?}\n",
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+                pid, agent, agent_session_id, is_restore,
+                binary, args);
+            let _ = std::fs::OpenOptions::new().create(true).append(true).open(&debug_path)
+                .and_then(|mut f| std::io::Write::write_all(&mut f, entry.as_bytes()));
+        }
+
+        Ok(Self { id, agent, cwd, agent_session_id: effective_sid, master, writer, alive, handle: Some(handle) })
     }
 
     pub fn write(&self, data: &str) -> Result<(), String> {
@@ -126,7 +174,15 @@ impl PtySession {
     pub fn is_alive(&self) -> bool { self.alive.load(Ordering::Relaxed) }
 
     pub fn info(&self) -> SessionInfo {
-        SessionInfo { id: self.id.clone(), agent: self.agent.clone(), cwd: self.cwd.clone(), pid: 0, running: self.is_alive() }
+        SessionInfo { id: self.id.clone(), agent: self.agent.clone(), cwd: self.cwd.clone(), pid: 0, running: self.is_alive(), agent_session_id: self.agent_session_id.clone() }
+    }
+
+    pub fn set_agent_session_id(&mut self, sid: String) {
+        // Only set if not already set (e.g. by --session-id at spawn time).
+        // This prevents false-positive regex matches from overwriting the correct ID.
+        if self.agent_session_id.is_empty() {
+            self.agent_session_id = sid;
+        }
     }
 }
 
