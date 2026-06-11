@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
-import { CanvasAddon } from '@xterm/addon-canvas';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { SearchAddon } from '@xterm/addon-search';
 import { pty, type SessionInfo } from '../lib/pty-ipc';
@@ -26,7 +25,7 @@ export function usePty(agent: string, cwd: string, container: HTMLDivElement | n
     });
     const fit = new FitAddon();
     const search = new SearchAddon();
-    term.loadAddon(fit); term.loadAddon(new CanvasAddon()); term.loadAddon(new ClipboardAddon()); term.loadAddon(search);
+    term.loadAddon(fit); term.loadAddon(new ClipboardAddon()); term.loadAddon(search);
     term.open(container);
     fit.fit();
     term.write(`\x1b[36m● Starting ${agent}...\x1b[0m\r\n`);
