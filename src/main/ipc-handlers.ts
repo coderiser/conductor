@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow } from 'electron';
 import { DaemonClient } from './daemon-client.js';
 import { saveLayout, loadLayout } from './database.js';
 import { loadAgentConfig, isAgentInstalled } from './agent-config.js';
+import { getGitStatus } from './git-integration.js';
 import type { DaemonMessage } from '../daemon/protocol/messages.js';
 
 export function setupIpcHandlers(daemonClient: DaemonClient, mainWindow: BrowserWindow): void {
@@ -35,6 +36,11 @@ export function setupIpcHandlers(daemonClient: DaemonClient, mainWindow: Browser
       name: a.name,
       installed: isAgentInstalled(a.command),
     }));
+  });
+
+  // Git status
+  ipcMain.handle('get_git_status', async (_, args: { path: string }) => {
+    return getGitStatus(args.path);
   });
 
   // Window controls

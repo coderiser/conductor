@@ -164,7 +164,7 @@ export default function App() {
                 onReady={(info) => {
                   updateId(p.dockId, info.sessionId);
                   setPanels((prev) => prev.map((pp) => pp.dockId === p.dockId ? { ...pp, ptyId: info.sessionId, cwd: info.cwd || pp.cwd, status: 'running', needsAttention: false, resumeId: info.agentSessionId || pp.resumeId } : pp));
-                  // TODO: Wire up get_git_status IPC handler (Task 10: Git branch detection)
+                  // Fetch Git branch and dirty status for the panel
                   window.electronAPI.invoke('get_git_status', { path: info.cwd || p.cwd }).then((git: any) => {
                     if (git?.branch) setPanels((prev) => prev.map((pp) => pp.dockId === p.dockId ? { ...pp, gitBranch: git.branch + (git.dirty ? ' *' : '') } : pp));
                   }).catch(() => {});
