@@ -14,9 +14,13 @@ const now = () => new Date().toLocaleTimeString('en-US', { hour12: false });
 function savePanelsToDb(panels: PanelEntry[]) {
   invoke('save_layout', {
     dockviewJson: '[]',
-    sessions: panels.map(p => ({ id: p.dockId, agent: p.agent, cwd: p.cwd === '.' ? '' : p.cwd, agent_session_id: (p.agent === 'cmd' || p.agent === 'cmd.exe') ? '' : (p.resumeId || '') })),
+    sessions: panels.map(p => {
+      let sid = (p.agent === 'cmd' || p.agent === 'cmd.exe') ? '' : (p.resumeId || '');
+      if (p.agent === 'opencode' && sid && !sid.startsWith('ses_')) sid = '';
+      return { id: p.dockId, agent: p.agent, cwd: p.cwd === '.' ? '' : p.cwd, agent_session_id: sid };
+    }),
     windowWidth: window.innerWidth, windowHeight: window.innerHeight,
-  }).catch(() => {});
+  }).catch((e) => { console.error('[savePanelsToDb]', e); });
 }
 
 export default function App() {

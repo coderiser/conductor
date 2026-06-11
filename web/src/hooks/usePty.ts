@@ -87,8 +87,12 @@ export function usePty(agent: string, cwd: string, container: HTMLDivElement | n
     ro.observe(container);
 
     const d = fit.proposeDimensions();
+    const spawnTimeout = setTimeout(() => {
+      term.write(`\x1b[31m● Spawn timed out (10s). Agent: ${agent}, Cwd: ${cwd}\x1b[0m\r\n`);
+    }, 10000);
     pty.spawn(agent, cwd, d?.cols ?? 80, d?.rows ?? 24, resumeId, isRestore)
       .then(async (info) => {
+        clearTimeout(spawnTimeout);
         sessionRef.current = info;
         // Post-spawn session ID capture for OpenCode/Codex (/rename flow)
         const unlistenSid = await pty.onSessionIdChanged(info.id, (sid) => {
@@ -118,7 +122,6 @@ export function usePty(agent: string, cwd: string, container: HTMLDivElement | n
               pty.setAgentSessionId(sessionRef.current.id, sid).then(() => {
                 term.write(`\x1b[35m[Session: ${sid} — will resume on restart]\x1b[0m\r\n`);
                 onSessionId?.(sid);
-              }).catch(() => {
               }).catch(() => {
                 term.write(`\x1b[31m[Session: ${sid} — FAILED to save]\x1b[0m\r\n`);
               });
@@ -152,6 +155,7 @@ export function usePty(agent: string, cwd: string, container: HTMLDivElement | n
         term.write(`\x1b[32m● Ready (${info.id})\x1b[0m\r\n`);
       })
       .catch((err) => {
+        clearTimeout(spawnTimeout);
         term.write(`\r\n\x1b[31m● Failed: ${err}\x1b[0m\r\n`);
         sessionRef.current = null;
       });
