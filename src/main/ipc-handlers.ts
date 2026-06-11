@@ -1,5 +1,6 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { DaemonClient } from './daemon-client.js';
+import { saveLayout, loadLayout } from './database.js';
 import type { DaemonMessage } from '../daemon/protocol/messages.js';
 
 export function setupIpcHandlers(daemonClient: DaemonClient, mainWindow: BrowserWindow): void {
@@ -44,5 +45,15 @@ export function setupIpcHandlers(daemonClient: DaemonClient, mainWindow: Browser
   daemonClient.on('session-id-changed', (msg: DaemonMessage) => {
     const m = msg as DaemonMessage & { type: 'session-id-changed' };
     mainWindow.webContents.send(`pty-session-id-changed-${m.sessionId}`, { agentSessionId: m.agentSessionId });
+  });
+}
+
+export function setupDatabaseIpcHandlers() {
+  ipcMain.handle('save_layout', async (_, layout) => {
+    saveLayout(layout);
+  });
+
+  ipcMain.handle('load_layout', async () => {
+    return loadLayout();
   });
 }

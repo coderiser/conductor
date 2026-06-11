@@ -9,7 +9,6 @@ let nextN = 1;
 const genUUID = () => crypto.randomUUID?.() || 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:r&0x3|0x8).toString(16); });
 const now = () => new Date().toLocaleTimeString('en-US', { hour12: false });
 
-// TODO: Move to database.ts in Task 8 (SQLite persistence)
 // Save panels to SQLite on every change (real-time persistence)
 function savePanelsToDb(panels: PanelEntry[]) {
   window.electronAPI.invoke('save_layout', {
@@ -20,7 +19,7 @@ function savePanelsToDb(panels: PanelEntry[]) {
       return { id: p.dockId, agent: p.agent, cwd: p.cwd === '.' ? '' : p.cwd, agent_session_id: sid };
     }),
     windowWidth: window.innerWidth, windowHeight: window.innerHeight,
-  }).catch(() => { /* IPC handler not yet implemented (Task 8) */ });
+  }).catch((err) => { console.error('Failed to save layout:', err); });
 }
 
 export default function App() {
@@ -41,7 +40,6 @@ export default function App() {
   useEffect(() => {
     (async () => {
       try {
-        // TODO: Wire up load_layout IPC handler (Task 8: SQLite persistence)
         const layout = await window.electronAPI.invoke('load_layout');
         if (layout?.sessions?.length > 0) {
           const restored: PanelEntry[] = layout.sessions.map((s: any) => {
@@ -56,7 +54,7 @@ export default function App() {
           addLog(`Restored ${restored.length} session(s)`, 'var(--running)');
           return;
         }
-      } catch { /* IPC handler not yet implemented (Task 8) */ }
+      } catch (err) { console.error('Failed to load layout:', err); }
       createDefault();
     })();
   }, []);

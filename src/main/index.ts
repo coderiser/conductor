@@ -1,7 +1,8 @@
 import { app, BrowserWindow, globalShortcut } from 'electron';
 import path from 'path';
 import { DaemonClient } from './daemon-client.js';
-import { setupIpcHandlers } from './ipc-handlers.js';
+import { setupIpcHandlers, setupDatabaseIpcHandlers } from './ipc-handlers.js';
+import { initDatabase } from './database.js';
 
 let mainWindow: BrowserWindow | null = null;
 let daemonClient: DaemonClient | null = null;
@@ -40,7 +41,11 @@ async function createWindow() {
   });
 }
 
-app.whenReady().then(createWindow).catch((err) => {
+app.whenReady().then(async () => {
+  initDatabase();
+  setupDatabaseIpcHandlers();
+  await createWindow();
+}).catch((err) => {
   console.error('[App] Failed to start:', err);
   app.quit();
 });
