@@ -40,7 +40,10 @@ async function createWindow() {
   });
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(createWindow).catch((err) => {
+  console.error('[App] Failed to start:', err);
+  app.quit();
+});
 
 app.on('window-all-closed', () => {
   daemonClient?.disconnect();
