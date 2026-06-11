@@ -28,14 +28,23 @@ export function initDatabase() {
   `);
 }
 
-export function saveLayout(layout: { sessions: { id: string; agent: string; cwd: string; agent_session_id: string }[] }) {
+export function saveLayout(layout: {
+  sessions: { id: string; agent: string; cwd: string; agent_session_id: string }[];
+  dockviewJson?: string;
+  windowWidth?: number;
+  windowHeight?: number;
+}) {
   if (!db) return;
 
   db.prepare('DELETE FROM sessions').run();
   for (const s of layout.sessions) {
     db.prepare('INSERT INTO sessions (id, agent, cwd, agent_session_id) VALUES (?, ?, ?, ?)').run(s.id, s.agent, s.cwd, s.agent_session_id);
   }
-  db.prepare('INSERT OR REPLACE INTO layout (id, dockview_json, window_width, window_height) VALUES (1, ?, ?, ?)').run('[]', 1400, 900);
+  db.prepare('INSERT OR REPLACE INTO layout (id, dockview_json, window_width, window_height) VALUES (1, ?, ?, ?)').run(
+    layout.dockviewJson ?? '[]',
+    layout.windowWidth ?? 1400,
+    layout.windowHeight ?? 900
+  );
 }
 
 export function loadLayout() {
