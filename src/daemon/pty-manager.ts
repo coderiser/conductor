@@ -56,7 +56,7 @@ export class PtyManager {
     let finalArgs = args;
 
     if (process.platform === 'win32' && command !== 'cmd.exe') {
-      const cmdline = `cd /d "${cwd}" && ${command} ${args.join(' ')}`;
+      const cmdline = `pushd "${cwd}" && ${command} ${args.join(' ')}`;
       finalCommand = 'cmd.exe';
       finalArgs = ['/k', cmdline];
     }
