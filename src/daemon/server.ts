@@ -12,7 +12,8 @@ export class DaemonServer {
   constructor(private pipePath: string) {
     this.ptyManager = new PtyManager(
       (sessionId, data) => this.broadcast({ type: 'output', sessionId, data }),
-      (sessionId, code) => this.broadcast({ type: 'exit', sessionId, code })
+      (sessionId, code) => this.broadcast({ type: 'exit', sessionId, code }),
+      (sessionId, agentSessionId) => this.broadcast({ type: 'session-id-changed', sessionId, agentSessionId })
     );
   }
 

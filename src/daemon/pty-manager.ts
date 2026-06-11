@@ -2,9 +2,11 @@ import * as pty from 'node-pty';
 import { SessionStore } from './session-store.js';
 import { SessionInfo } from './protocol/messages.js';
 import { loadAgentConfig, type AgentConfig } from './agent-config.js';
+import { discoverSessionIds } from './session-recovery.js';
 
 export type OutputCallback = (sessionId: string, data: string) => void;
 export type ExitCallback = (sessionId: string, code: number) => void;
+export type SessionIdDiscoveredCallback = (sessionId: string, agentSessionId: string) => void;
 
 export class PtyManager {
   private sessionStore = new SessionStore();
@@ -14,7 +16,8 @@ export class PtyManager {
 
   constructor(
     private onOutput: OutputCallback,
-    private onExit: ExitCallback
+    private onExit: ExitCallback,
+    private onSessionIdDiscovered?: SessionIdDiscoveredCallback
   ) {
     for (const cfg of loadAgentConfig()) {
       this.agentConfigs.set(cfg.id, cfg);
@@ -93,6 +96,23 @@ export class PtyManager {
       this.ptyProcesses.delete(sessionId);
       this.onExit(sessionId, exitCode);
     });
+
+    // Session Recovery: before/after snapshot diff for opencode/codex
+    if ((agent === 'opencode' || agent === 'codex') && !agentSessionId) {
+      const prevIds = new Set(discoverSessionIds(agent, cwd));
+      setTimeout(() => {
+        try {
+          const currentIds = discoverSessionIds(agent, cwd);
+          const newId = currentIds.find((id: string) => !prevIds.has(id));
+          if (newId) {
+            this.sessionStore.setAgentSessionId(sessionId, newId);
+            this.onSessionIdDiscovered?.(sessionId, newId);
+          }
+        } catch {
+          // Discovery failure is non-fatal
+        }
+      }, 3000);
+    }
 
     return info;
   }
