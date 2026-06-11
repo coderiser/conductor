@@ -1,24 +1,36 @@
 {
   "name": "conductor",
-  "version": "0.1.0",
-  "description": "Windows Agent Workbench — Multi-Agent terminal workspace",
+  "version": "2.0.0",
+  "description": "AI Agent Terminal Manager",
+  "main": "out/main/index.js",
   "scripts": {
-    "start": "cd web && npm run tauri:dev",
-    "build": "cd web && npm run tauri:build",
-    "restart": "taskkill /f /im conductor.exe & cd web && npm run tauri:dev",
-    "kill": "taskkill /f /im conductor.exe",
-    "status": "tasklist /fi \"imagename eq conductor.exe\"",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "package": "electron-builder"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@xterm/xterm": "^6.0.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-clipboard": "^0.2.0",
+    "@xterm/addon-search": "^0.16.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zustand": "^5.0.0",
+    "better-sqlite3": "^12.0.0",
+    "simple-git": "^3.27.0",
+    "node-pty": "^1.1.0"
+  },
   "devDependencies": {
-    "@playwright/test": "^1.48.0",
-    "@types/node": "^22.0.0",
-    "typescript": "^5.6.0",
-    "vitest": "^2.0.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
+    "electron": "^40.0.0",
+    "electron-vite": "^4.0.0",
+    "electron-builder": "^26.0.0",
+    "vite": "^7.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "^5.9.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/node": "^24.0.0",
+    "@types/better-sqlite3": "^7.6.0",
+    "@swc/core": "^1.0.0"
   }
 }
