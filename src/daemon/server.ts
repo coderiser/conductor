@@ -21,10 +21,20 @@ export class DaemonServer {
       const decoder = new FrameDecoder();
 
       socket.on('data', (data) => {
-        const messages = decoder.push(data);
-        for (const msg of messages) {
-          this.handleMessage(socket, msg as ClientMessage);
+        try {
+          const messages = decoder.push(data);
+          for (const msg of messages) {
+            this.handleMessage(socket, msg as ClientMessage);
+          }
+        } catch (err) {
+          console.error('Message processing error:', (err as Error).message);
+          try { socket.destroy(); } catch { /* ignore */ }
         }
+      });
+
+      socket.on('error', (err) => {
+        console.error('Socket error:', err.message);
+        // Socket will emit 'close' after this, so cleanup happens there
       });
 
       socket.on('close', () => {
@@ -90,6 +100,10 @@ export class DaemonServer {
 
   stop() {
     this.ptyManager.killAll();
+    for (const client of this.clients) {
+      client.destroy();
+    }
+    this.clients = [];
     this.server?.close();
   }
 }
