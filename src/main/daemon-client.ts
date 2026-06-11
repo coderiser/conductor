@@ -1,9 +1,11 @@
 import net from 'net';
+import fs from 'fs';
 import { spawn } from 'child_process';
 import path from 'path';
 import { app } from 'electron';
 import { encodeFrame, FrameDecoder } from '../daemon/protocol/framing.js';
 import type { ClientMessage, DaemonMessage } from '../daemon/protocol/messages.js';
+import { DEFAULT_AGENTS } from './agent-config.js';
 
 const PIPE_PATH = '\\\\.\\pipe\\conductor-pty-daemon';
 
@@ -31,11 +33,16 @@ export class DaemonClient {
       console.log('[DaemonClient] Starting new PTY Daemon...');
     }
 
-    // Start daemon process
+    // Ensure agents.json is available in userData for the daemon to read
+    this.ensureAgentsConfig();
+
+    // Start daemon process with config path in environment
     const daemonScript = path.join(app.getAppPath(), 'dist', 'daemon', 'main.js');
+    const configPath = path.join(app.getPath('userData'), 'agents.json');
     const daemonProcess = spawn('node', [daemonScript], {
       stdio: 'ignore',
       detached: true,
+      env: { ...process.env, CONDUCTOR_AGENTS_CONFIG: configPath },
     });
     daemonProcess.unref();
 
@@ -43,6 +50,26 @@ export class DaemonClient {
     await this.waitForDaemon();
     await this.tryConnect();
     console.log('[DaemonClient] PTY Daemon started and connected');
+  }
+
+  /**
+   * Copy agents.json from the app bundle to userData if not already present.
+   * This is needed because the daemon runs as plain Node.js and may not be able
+   * to read files inside the Electron asar archive.
+   */
+  private ensureAgentsConfig(): void {
+    const userDataPath = path.join(app.getPath('userData'), 'agents.json');
+    if (fs.existsSync(userDataPath)) return;
+
+    // Try to find agents.json in the app bundle
+    const bundlePath = path.join(app.getAppPath(), 'agents.json');
+    if (fs.existsSync(bundlePath)) {
+      fs.copyFileSync(bundlePath, userDataPath);
+      return;
+    }
+
+    // Create defaults if neither location has the file
+    fs.writeFileSync(path.join(app.getPath('userData'), 'agents.json'), JSON.stringify({ agents: DEFAULT_AGENTS }, null, 2));
   }
 
   /**

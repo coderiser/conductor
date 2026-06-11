@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { DaemonClient } from './daemon-client.js';
 import { saveLayout, loadLayout } from './database.js';
+import { loadAgentConfig, isAgentInstalled } from './agent-config.js';
 import type { DaemonMessage } from '../daemon/protocol/messages.js';
 
 export function setupIpcHandlers(daemonClient: DaemonClient, mainWindow: BrowserWindow): void {
@@ -24,6 +25,16 @@ export function setupIpcHandlers(daemonClient: DaemonClient, mainWindow: Browser
 
   ipcMain.handle('pty_set_agent_session_id', async (_, args: { sessionId: string; agentSessionId: string }) => {
     daemonClient.send({ type: 'set-agent-session-id', ...args });
+  });
+
+  // Agent config: list agents with installed status
+  ipcMain.handle('detect_agents', async () => {
+    const agents = loadAgentConfig();
+    return agents.map((a) => ({
+      id: a.id,
+      name: a.name,
+      installed: isAgentInstalled(a.command),
+    }));
   });
 
   // Window controls

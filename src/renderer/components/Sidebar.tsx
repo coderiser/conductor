@@ -22,13 +22,12 @@ export function Sidebar({ onAddTerminal, onKillCurrent, onBroadcast, stats, sess
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const logEndRef = useRef<HTMLDivElement>(null);
 
-  // TODO: Wire up detect_agents IPC handler (Task 9: Agent config loading)
   useEffect(() => {
     (async () => {
       try {
         const agents = await window.electronAPI.invoke('detect_agents');
         if (Array.isArray(agents)) setDetected(agents);
-      } catch { /* IPC handler not yet implemented */ }
+      } catch { /* ignore */ }
     })();
   }, []);
 

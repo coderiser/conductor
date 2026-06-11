@@ -1,27 +1,25 @@
 import * as pty from 'node-pty';
 import { SessionStore } from './session-store.js';
 import { SessionInfo } from './protocol/messages.js';
+import { loadAgentConfig, type AgentConfig } from './agent-config.js';
 
 export type OutputCallback = (sessionId: string, data: string) => void;
 export type ExitCallback = (sessionId: string, code: number) => void;
-
-interface AgentConfig {
-  command: string;
-  args: string[];
-  createTemplate: string;
-  resumeTemplate: string;
-  setup: string[];
-}
 
 export class PtyManager {
   private sessionStore = new SessionStore();
   private ptyProcesses = new Map<string, pty.IPty>();
   private nextId = 1;
+  private agentConfigs = new Map<string, AgentConfig>();
 
   constructor(
     private onOutput: OutputCallback,
     private onExit: ExitCallback
-  ) {}
+  ) {
+    for (const cfg of loadAgentConfig()) {
+      this.agentConfigs.set(cfg.id, cfg);
+    }
+  }
 
   spawn(agent: string, cwd: string, cols: number, rows: number, agentSessionId = '', isRestore = false): SessionInfo {
     const sessionId = `S${this.nextId++}`;
@@ -135,13 +133,9 @@ export class PtyManager {
   }
 
   private getAgentConfig(agent: string): AgentConfig {
-    // TODO: 从 agents.json 加载，这里先用默认值
-    const defaults: Record<string, AgentConfig> = {
-      'cmd.exe': { command: 'cmd.exe', args: [], createTemplate: '', resumeTemplate: '', setup: [] },
-      'claude': { command: 'claude', args: ['--allow-dangerously-skip-permissions'], createTemplate: '--session-id {session_id}', resumeTemplate: '--resume {session_id}', setup: [] },
-      'opencode': { command: 'opencode', args: [], createTemplate: '', resumeTemplate: '--session {session_id}', setup: [] },
-      'codex': { command: 'codex', args: [], createTemplate: '', resumeTemplate: 'resume --last', setup: [] }
-    };
-    return defaults[agent] || { command: agent, args: [], createTemplate: '', resumeTemplate: '', setup: [] };
+    const config = this.agentConfigs.get(agent);
+    if (config) return config;
+    // Fallback: treat unknown agent as raw command with no templates
+    return { id: agent, name: agent, command: agent, args: [], createTemplate: '', resumeTemplate: '', setup: [], builtin: false };
   }
 }
