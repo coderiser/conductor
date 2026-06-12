@@ -1,16 +1,17 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { DaemonClient } from './daemon-client.js';
-import { saveLayout, loadLayout, saveTask } from './database.js';
+import { saveLayout, loadLayout, saveTask, saveContextEntry } from './database.js';
 import { loadAgentConfig, isAgentInstalled } from './agent-config.js';
 import { getGitStatus } from './git-integration.js';
 import { StatsCollector } from './stats-collector.js';
 import { NotifyCenter } from './notify-center.js';
 import type { DaemonMessage } from '../daemon/protocol/messages.js';
 import type { TaskQueue } from './task-queue.js';
+import type { ContextShare } from './context-share.js';
 import type { TaskRecord } from '../common/stats-types';
 import type { AgentCapability } from '../common/agent-protocol';
 
-export function setupIpcHandlers(daemonClient: DaemonClient, mainWindow: BrowserWindow, statsCollector: StatsCollector, notifyCenter: NotifyCenter, taskQueue: TaskQueue): void {
+export function setupIpcHandlers(daemonClient: DaemonClient, mainWindow: BrowserWindow, statsCollector: StatsCollector, notifyCenter: NotifyCenter, taskQueue: TaskQueue, contextShare: ContextShare): void {
   // Return the project directory (main process cwd) to the renderer
   ipcMain.on('get_project_dir', (event) => {
     event.returnValue = process.cwd();
@@ -133,6 +134,26 @@ export function setupIpcHandlers(daemonClient: DaemonClient, mainWindow: Browser
     taskQueue.fail(taskId, error);
     const task = taskQueue.get(taskId);
     if (task) saveTask(task);
+  });
+
+  // ── Context Sharing handlers (Phase 4) ──────────────────────────────────
+
+  ipcMain.handle('ctx_publish', (_e, sessionId: string, agentId: string, input: any) => {
+    const entry = contextShare.publish(sessionId, agentId, input);
+    saveContextEntry(entry);
+    mainWindow.webContents.send('ctx_new_entry', entry);
+    return entry;
+  });
+
+  ipcMain.handle('ctx_list', (_e, filter?: any) => {
+    if (filter && Object.keys(filter).length > 0) return contextShare.search(filter);
+    return contextShare.list();
+  });
+
+  ipcMain.handle('ctx_mark_consumed', (_e, id: string) => {
+    contextShare.markConsumed(id);
+    const entry = contextShare.get(id);
+    if (entry) saveContextEntry(entry);
   });
 }
 

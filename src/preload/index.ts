@@ -50,6 +50,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   completeTask: (taskId: string, result: string) => ipcRenderer.invoke('task_complete', taskId, result),
   failTask: (taskId: string, error: string) => ipcRenderer.invoke('task_fail', taskId, error),
 
+  // Context Sharing APIs
+  publishContext: (sessionId: string, agentId: string, input: any) =>
+    ipcRenderer.invoke('ctx_publish', sessionId, agentId, input),
+  listContext: (filter?: any) => ipcRenderer.invoke('ctx_list', filter),
+  markContextConsumed: (id: string) => ipcRenderer.invoke('ctx_mark_consumed', id),
+  onNewContext: (callback: (entry: any) => void) => {
+    const handler = (_e: any, entry: any) => callback(entry);
+    ipcRenderer.on('ctx_new_entry', handler);
+    return () => { ipcRenderer.removeListener('ctx_new_entry', handler); };
+  },
+
   // Window controls
   closeWindow: () => ipcRenderer.send('window-close'),
 });

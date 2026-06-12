@@ -117,6 +117,20 @@ export interface TaskRecord {
   error?: string;
 }
 
+/** Context entry shared by an agent, visible to other agents */
+export interface ContextEntry {
+  id: string;
+  sessionId: string;
+  agentId: string;
+  contextType: string;
+  title: string;
+  body: string;
+  tags: string[];
+  priority: 'low' | 'normal' | 'high';
+  timestamp: number;
+  consumed: boolean;
+}
+
 /** Estimate cost from token count (simple: assume 60% input / 40% output split) */
 export function estimateCost(agentId: string, tokenCount: number): number {
   const pricing = AGENT_PRICING[agentId];

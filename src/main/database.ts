@@ -3,7 +3,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import { app } from 'electron';
-import type { TaskRecord } from '../common/stats-types';
+import type { TaskRecord, ContextEntry } from '../common/stats-types';
 
 interface LayoutData {
   sessions: { id: string; agent: string; cwd: string; agent_session_id: string }[];
@@ -65,6 +65,19 @@ export function initDatabase() {
         completed_at INTEGER,
         result TEXT,
         error TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS context_entries (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        agent_id TEXT NOT NULL,
+        context_type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT DEFAULT '',
+        tags TEXT DEFAULT '[]',
+        priority TEXT DEFAULT 'normal',
+        timestamp INTEGER NOT NULL,
+        consumed INTEGER DEFAULT 0
       );
     `);
   } catch (err) {
@@ -183,5 +196,30 @@ export function loadTasks(): TaskRecord[] {
     status: r.status, progress: r.progress, createdAt: r.created_at,
     startedAt: r.started_at, completedAt: r.completed_at,
     result: r.result, error: r.error,
+  }));
+}
+
+// ── Context Sharing persistence (Phase 4) ─────────────────────────────────
+
+export function saveContextEntry(entry: ContextEntry): void {
+  if (!db) return;
+  const stmt = db.prepare(`
+    INSERT OR REPLACE INTO context_entries
+      (id, session_id, agent_id, context_type, title, body, tags, priority, timestamp, consumed)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run(entry.id, entry.sessionId, entry.agentId, entry.contextType,
+    entry.title, entry.body, JSON.stringify(entry.tags), entry.priority,
+    entry.timestamp, entry.consumed ? 1 : 0);
+}
+
+export function loadContextEntries(): ContextEntry[] {
+  if (!db) return [];
+  const rows = db.prepare('SELECT * FROM context_entries ORDER BY timestamp DESC').all() as any[];
+  return rows.map((r: any) => ({
+    id: r.id, sessionId: r.session_id, agentId: r.agent_id,
+    contextType: r.context_type, title: r.title, body: r.body,
+    tags: JSON.parse(r.tags), priority: r.priority,
+    timestamp: r.timestamp, consumed: r.consumed === 1,
   }));
 }

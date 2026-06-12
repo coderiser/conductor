@@ -23,6 +23,12 @@ export interface ElectronAPI {
   completeTask: (taskId: string, result: string) => Promise<void>;
   failTask: (taskId: string, error: string) => Promise<void>;
 
+  // Context Sharing APIs
+  publishContext: (sessionId: string, agentId: string, input: any) => Promise<any>;
+  listContext: (filter?: any) => Promise<any[]>;
+  markContextConsumed: (id: string) => Promise<void>;
+  onNewContext: (callback: (entry: any) => void) => () => void;
+
   // Window controls
   closeWindow: () => void;
 }
