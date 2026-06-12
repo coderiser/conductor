@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TerminalPanel } from './components/TerminalPanel';
 import { Sidebar, type SessionMeta, type LogEntry } from './components/Sidebar';
+import { AgentDashboard } from './components/AgentDashboard';
+import { NotifyPanel } from './components/NotifyPanel';
 import { useSessionStore } from './store/sessions';
 import { pty } from './lib/pty-ipc';
 
@@ -30,10 +32,14 @@ export default function App() {
   const [activeIdx, setActiveIdx] = useState(0);
   const startTime = useRef(Date.now());
   const { add, remove, updateId, sessions } = useSessionStore();
-  const [stats, setStats] = useState({ tasks: 0, tokens: 0, running: 0, failed: 0, duration: '0m' });
+  const [stats, setStats] = useState({ tasks: 0, tokens: 0, running: 0, failed: 0, duration: '0m', cost: 0 });
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const failedRef = useRef(0);
   const tokensRef = useRef(0);
+  const [showDashboard, setShowDashboard] = useState(false);
+  const [showNotify, setShowNotify] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [totalCost, setTotalCost] = useState(0);
 
   const addLog = useCallback((text: string, color: string) => {
     setLogs((prev) => [...prev.slice(-99), { time: now(), text, color }]);
@@ -83,10 +89,27 @@ export default function App() {
   // Stats
   useEffect(() => {
     const iv = setInterval(() => {
-      setStats({ tasks: panels.length, tokens: tokensRef.current, running: panels.filter(p => p.running).length, failed: failedRef.current, duration: `${Math.floor((Date.now() - startTime.current) / 60000)}m` });
+      setStats({ tasks: panels.length, tokens: tokensRef.current, running: panels.filter(p => p.running).length, failed: failedRef.current, duration: `${Math.floor((Date.now() - startTime.current) / 60000)}m`, cost: totalCost });
     }, 1000);
     return () => clearInterval(iv);
-  }, [panels]);
+  }, [panels, totalCost]);
+
+  // Poll notification count and cost from main process
+  useEffect(() => {
+    const refresh = async () => {
+      try {
+        const count = await window.electronAPI.getNotificationCount();
+        setNotificationCount(count);
+      } catch { /* ignore */ }
+      try {
+        const totals = await window.electronAPI.getStatsTotals();
+        setTotalCost(totals?.cost ?? 0);
+      } catch { /* ignore */ }
+    };
+    refresh();
+    const iv = setInterval(refresh, 3000);
+    return () => clearInterval(iv);
+  }, []);
 
   const addTerminal = useCallback((agent: string, cwd?: string) => {
     const id = `term-${nextN++}`;
@@ -146,6 +169,7 @@ export default function App() {
       if (e.key === 'F10') { e.preventDefault(); window.electronAPI.closeWindow(); }
       if (e.ctrlKey && e.key === 'n') { e.preventDefault(); addTerminal('cmd.exe'); }
       if (e.ctrlKey && e.key === 'w') { e.preventDefault(); killCurrent(); }
+      if (e.ctrlKey && e.key === 'd') { e.preventDefault(); setShowDashboard((v) => !v); }
     };
     window.addEventListener('keydown', h, { capture: true });
     return () => window.removeEventListener('keydown', h, { capture: true });
@@ -155,7 +179,10 @@ export default function App() {
     <div style={{ display: 'flex', height: '100vh', width: '100vw' }}>
       <Sidebar onAddTerminal={addTerminal} onKillCurrent={killCurrent} onBroadcast={handleBroadcast} stats={stats}
         sessions={panels.map((p): SessionMeta => ({ id: p.dockId, agent: p.agent, cwd: p.cwd, elapsed: Math.floor((Date.now() - p.createdAt) / 1000), running: p.running, status: p.status, needsAttention: p.needsAttention, gitBranch: p.gitBranch, exited: p.exited }))}
-        logs={logs} />
+        logs={logs}
+        notificationCount={notificationCount}
+        onShowDashboard={() => setShowDashboard(true)}
+        onShowNotifications={() => setShowNotify(true)} />
       <div style={{ flex: 1, display: 'grid', gridTemplateColumns: `repeat(${gridCols}, 1fr)`, gridTemplateRows: `repeat(${totalRows}, 1fr)`, background: '#1a1a1e', minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
         {cells.map((c) => {
           const p = panels[c.idx];
@@ -187,6 +214,13 @@ export default function App() {
           );
         })}
       </div>
+      <AgentDashboard visible={showDashboard} onClose={() => setShowDashboard(false)} />
+      <NotifyPanel visible={showNotify} onClose={() => setShowNotify(false)}
+        onJumpToSession={(sessionId) => {
+          const idx = panels.findIndex(p => p.dockId === sessionId || p.ptyId === sessionId);
+          if (idx >= 0) setActiveIdx(idx);
+        }}
+      />
     </div>
   );
 }

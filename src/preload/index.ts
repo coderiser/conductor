@@ -26,6 +26,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener(`pty-session-id-changed-${id}`, listener);
   },
 
+  // Stats
+  getAgentStats: () => ipcRenderer.invoke('get_agent_stats'),
+  getStatsTotals: () => ipcRenderer.invoke('get_stats_totals'),
+
+  // Notifications
+  getNotifications: (includeDismissed?: boolean) => ipcRenderer.invoke('get_notifications', includeDismissed),
+  dismissNotification: (id: string) => ipcRenderer.invoke('dismiss_notification', id),
+  dismissSessionNotifications: (sessionId: string) => ipcRenderer.invoke('dismiss_session_notifications', sessionId),
+  getNotificationCount: () => ipcRenderer.invoke('get_notification_count'),
+
+  onNotification: (callback: (notification: any) => void) => {
+    const listener = (_event: any, notification: any) => callback(notification);
+    ipcRenderer.on('notification', listener);
+    return () => ipcRenderer.removeListener('notification', listener);
+  },
+
   // Window controls
   closeWindow: () => ipcRenderer.send('window-close'),
 });

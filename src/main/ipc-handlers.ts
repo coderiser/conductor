@@ -3,9 +3,11 @@ import { DaemonClient } from './daemon-client.js';
 import { saveLayout, loadLayout } from './database.js';
 import { loadAgentConfig, isAgentInstalled } from './agent-config.js';
 import { getGitStatus } from './git-integration.js';
+import { StatsCollector } from './stats-collector.js';
+import { NotifyCenter } from './notify-center.js';
 import type { DaemonMessage } from '../daemon/protocol/messages.js';
 
-export function setupIpcHandlers(daemonClient: DaemonClient, mainWindow: BrowserWindow): void {
+export function setupIpcHandlers(daemonClient: DaemonClient, mainWindow: BrowserWindow, statsCollector: StatsCollector, notifyCenter: NotifyCenter): void {
   // Return the project directory (main process cwd) to the renderer
   ipcMain.on('get_project_dir', (event) => {
     event.returnValue = process.cwd();
@@ -46,6 +48,32 @@ export function setupIpcHandlers(daemonClient: DaemonClient, mainWindow: Browser
   // Git status
   ipcMain.handle('get_git_status', async (_, args: { path: string }) => {
     return getGitStatus(args.path);
+  });
+
+  // Stats
+  ipcMain.handle('get_agent_stats', async () => {
+    return statsCollector.getAllStats();
+  });
+
+  ipcMain.handle('get_stats_totals', async () => {
+    return statsCollector.getTotals();
+  });
+
+  // Notifications
+  ipcMain.handle('get_notifications', async (_, includeDismissed?: boolean) => {
+    return notifyCenter.getNotifications(includeDismissed);
+  });
+
+  ipcMain.handle('dismiss_notification', async (_, id: string) => {
+    notifyCenter.dismiss(id);
+  });
+
+  ipcMain.handle('dismiss_session_notifications', async (_, sessionId: string) => {
+    notifyCenter.dismissAllForSession(sessionId);
+  });
+
+  ipcMain.handle('get_notification_count', async () => {
+    return notifyCenter.getTotalUnread();
   });
 
   // Window controls

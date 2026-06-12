@@ -7,12 +7,15 @@ interface Props {
   onAddTerminal: (a: string, cwd?: string) => void;
   onKillCurrent: () => void;
   onBroadcast: (data: string) => void;
-  stats: { tasks: number; tokens: number; running: number; failed: number; duration: string };
+  stats: { tasks: number; tokens: number; running: number; failed: number; duration: string; cost: number };
   sessions: SessionMeta[];
   logs: LogEntry[];
+  notificationCount?: number;
+  onShowDashboard?: () => void;
+  onShowNotifications?: () => void;
 }
 
-export function Sidebar({ onAddTerminal, onKillCurrent, onBroadcast, stats, sessions, logs }: Props) {
+export function Sidebar({ onAddTerminal, onKillCurrent, onBroadcast, stats, sessions, logs, notificationCount = 0, onShowDashboard, onShowNotifications }: Props) {
   const [detected, setDetected] = useState<Array<{id:string;name:string;installed:boolean}>>([
     { id: 'cmd', name: 'Command Prompt', installed: true },
   ]);
@@ -102,9 +105,27 @@ export function Sidebar({ onAddTerminal, onKillCurrent, onBroadcast, stats, sess
           <div style={{ fontSize:11, color:'var(--body)', lineHeight:'18px' }}>
             <div style={{ display:'flex', justifyContent:'space-between' }}><span>Tasks</span><span style={{ color:'var(--pending)' }}>{stats.tasks}</span></div>
             <div style={{ display:'flex', justifyContent:'space-between' }}><span>Tokens</span><span style={{ color:'var(--pending)' }}>{stats.tokens.toLocaleString()}</span></div>
+            <div style={{ display:'flex', justifyContent:'space-between' }}><span>Cost</span><span style={{ color:'var(--running)' }}>{stats.cost > 0 ? '$' + stats.cost.toFixed(2) : '—'}</span></div>
             <div style={{ display:'flex', justifyContent:'space-between' }}><span>Running</span><span style={{ color:'var(--running)' }}>{stats.running}</span></div>
             <div style={{ display:'flex', justifyContent:'space-between' }}><span>Failed</span><span style={{ color: stats.failed > 0 ? 'var(--failed)' : 'var(--caption)' }}>{stats.failed}</span></div>
             <div style={{ display:'flex', justifyContent:'space-between' }}><span>Duration</span><span style={{ color:'var(--caption)' }}>{stats.duration}</span></div>
+            <div style={{ display:'flex', gap:4, marginTop:6 }}>
+              {onShowDashboard && (
+                <button onClick={onShowDashboard} style={{
+                  flex:1, background:'var(--canvas-soft)', border:'1px solid var(--hairline)', borderRadius:3,
+                  color:'var(--body)', cursor:'pointer', padding:'3px 0', fontSize:10, fontFamily:'var(--font-sans)',
+                }}>📊 Dashboard</button>
+              )}
+              {onShowNotifications && (
+                <button onClick={onShowNotifications} style={{
+                  flex:1, background: notificationCount > 0 ? 'rgba(94,106,210,0.15)' : 'var(--canvas-soft)',
+                  border: notificationCount > 0 ? '1px solid var(--accent)' : '1px solid var(--hairline)',
+                  borderRadius:3,
+                  color: notificationCount > 0 ? 'var(--accent)' : 'var(--body)',
+                  cursor:'pointer', padding:'3px 0', fontSize:10, fontFamily:'var(--font-sans)',
+                }}>🔔 {notificationCount > 0 ? `(${notificationCount})` : 'Notify'}</button>
+              )}
+            </div>
           </div>
         )}
 

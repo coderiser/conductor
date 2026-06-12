@@ -7,7 +7,8 @@ export type ClientMessage =
   | { type: 'resize'; sessionId: string; cols: number; rows: number }
   | { type: 'kill'; sessionId: string }
   | { type: 'list' }
-  | { type: 'set-agent-session-id'; sessionId: string; agentSessionId: string };
+  | { type: 'set-agent-session-id'; sessionId: string; agentSessionId: string }
+  | { type: 'get-session-activity'; sessionId: string };
 
 export type DaemonMessage =
   | { type: 'hello-ack'; version: number }
@@ -15,6 +16,7 @@ export type DaemonMessage =
   | { type: 'output'; sessionId: string; data: string }
   | { type: 'exit'; sessionId: string; code: number }
   | { type: 'session-id-changed'; sessionId: string; agentSessionId: string }
+  | { type: 'session-activity'; sessionId: string; hasRecentOutput: boolean; lastOutputAt: number }
   | { type: 'list-response'; sessions: SessionInfo[] }
   | { type: 'error'; message: string };
 

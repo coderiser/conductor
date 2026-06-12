@@ -94,6 +94,11 @@ export class DaemonServer {
         this.broadcast({ type: 'session-id-changed', sessionId: msg.sessionId, agentSessionId: msg.agentSessionId });
         return;
       }
+      case 'get-session-activity': {
+        const activity = this.ptyManager.getSessionActivity(msg.sessionId);
+        response = { type: 'session-activity', sessionId: msg.sessionId, hasRecentOutput: activity.hasRecentOutput, lastOutputAt: activity.lastOutputAt };
+        break;
+      }
       default:
         response = { type: 'error', message: `Unknown message type: ${(msg as any).type}` };
     }

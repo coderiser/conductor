@@ -22,6 +22,7 @@ export type SessionIdDiscoveredCallback = (sessionId: string, agentSessionId: st
 export class PtyManager {
   private sessionStore = new SessionStore();
   private ptyProcesses = new Map<string, pty.IPty>();
+  private lastOutputTime = new Map<string, number>();
   private nextId = 1;
   private agentConfigs = new Map<string, AgentConfig>();
 
@@ -178,12 +179,14 @@ export class PtyManager {
 
     ptyProcess.onData((data) => {
       this.sessionStore.appendOutput(sessionId, data);
+      this.lastOutputTime.set(sessionId, Date.now());
       this.onOutput(sessionId, data);
     });
 
     ptyProcess.onExit(({ exitCode }) => {
       this.sessionStore.delete(sessionId);
       this.ptyProcesses.delete(sessionId);
+      this.lastOutputTime.delete(sessionId);
       this.onExit(sessionId, exitCode);
     });
 
@@ -254,6 +257,11 @@ export class PtyManager {
 
   setAgentSessionId(sessionId: string, agentSessionId: string) {
     this.sessionStore.setAgentSessionId(sessionId, agentSessionId);
+  }
+
+  getSessionActivity(sessionId: string): { hasRecentOutput: boolean; lastOutputAt: number } {
+    const last = this.lastOutputTime.get(sessionId) || 0;
+    return { hasRecentOutput: Date.now() - last < 30_000, lastOutputAt: last };
   }
 
   private getAgentConfig(agent: string): AgentConfig {

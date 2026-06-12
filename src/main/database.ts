@@ -36,6 +36,18 @@ export function initDatabase() {
         cwd TEXT NOT NULL,
         agent_session_id TEXT NOT NULL DEFAULT ''
       );
+
+      CREATE TABLE IF NOT EXISTS agent_stats (
+        session_id TEXT PRIMARY KEY,
+        agent TEXT NOT NULL,
+        token_count INTEGER DEFAULT 0,
+        estimated_cost REAL DEFAULT 0,
+        health_score INTEGER DEFAULT 100,
+        status TEXT NOT NULL DEFAULT 'starting',
+        error_count INTEGER DEFAULT 0,
+        started_at TEXT NOT NULL,
+        last_activity TEXT NOT NULL
+      );
     `);
   } catch (err) {
     console.error('[Database] Failed to initialize:', err);
@@ -65,4 +77,62 @@ export function loadLayout(): { sessions: SessionRow[]; dockview_json: string; w
   const layout = db.prepare('SELECT dockview_json, window_width, window_height FROM layout WHERE id=1').get() as LayoutRow | undefined;
 
   return { sessions, dockview_json: layout?.dockview_json ?? '[]', window_width: layout?.window_width ?? 1400, window_height: layout?.window_height ?? 900 };
+}
+
+// ── Agent Stats ──────────────────────────────────────────────────────────
+
+interface AgentStatsInput {
+  sessionId: string;
+  agent: string;
+  tokenCount: number;
+  estimatedCost: number;
+  healthScore: number;
+  status: string;
+  errorCount: number;
+  startTime: number;
+  lastActivity: number;
+}
+
+export function saveAgentStats(stats: AgentStatsInput[]) {
+  if (!db || stats.length === 0) return;
+  const conn = db;
+
+  const saveAll = conn.transaction((rows: AgentStatsInput[]) => {
+    const stmt = conn.prepare(`
+      INSERT OR REPLACE INTO agent_stats
+      (session_id, agent, token_count, estimated_cost, health_score, status, error_count, started_at, last_activity)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    for (const r of rows) {
+      stmt.run(
+        r.sessionId ?? '',
+        r.agent ?? '',
+        r.tokenCount ?? 0,
+        r.estimatedCost ?? 0,
+        r.healthScore ?? 100,
+        r.status ?? 'starting',
+        r.errorCount ?? 0,
+        new Date(r.startTime).toISOString(),
+        new Date(r.lastActivity).toISOString()
+      );
+    }
+  });
+  saveAll(stats);
+}
+
+export interface AgentStatsRow {
+  session_id: string;
+  agent: string;
+  token_count: number;
+  estimated_cost: number;
+  health_score: number;
+  status: string;
+  error_count: number;
+  started_at: string;
+  last_activity: string;
+}
+
+export function loadAgentStats(): AgentStatsRow[] {
+  if (!db) return [];
+  return db.prepare('SELECT * FROM agent_stats ORDER BY started_at DESC').all() as AgentStatsRow[];
 }
