@@ -42,6 +42,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('notification', listener);
   },
 
+  // Task Queue APIs
+  enqueueTask: (input: { title: string; description: string; priority: string; requiredCapabilities: string[] }) =>
+    ipcRenderer.invoke('task_enqueue', input),
+  listTasks: (status?: string) => ipcRenderer.invoke('task_list', status),
+  getTaskStats: () => ipcRenderer.invoke('task_stats'),
+  completeTask: (taskId: string, result: string) => ipcRenderer.invoke('task_complete', taskId, result),
+  failTask: (taskId: string, error: string) => ipcRenderer.invoke('task_fail', taskId, error),
+
   // Window controls
   closeWindow: () => ipcRenderer.send('window-close'),
 });

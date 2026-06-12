@@ -16,6 +16,13 @@ export interface ElectronAPI {
   getNotificationCount: () => Promise<number>;
   onNotification: (callback: (notification: any) => void) => () => void;
 
+  // Task Queue APIs
+  enqueueTask: (input: { title: string; description: string; priority: string; requiredCapabilities: string[] }) => Promise<any>;
+  listTasks: (status?: string) => Promise<any[]>;
+  getTaskStats: () => Promise<any>;
+  completeTask: (taskId: string, result: string) => Promise<void>;
+  failTask: (taskId: string, error: string) => Promise<void>;
+
   // Window controls
   closeWindow: () => void;
 }

@@ -3,6 +3,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import { app } from 'electron';
+import type { TaskRecord } from '../common/stats-types';
 
 interface LayoutData {
   sessions: { id: string; agent: string; cwd: string; agent_session_id: string }[];
@@ -47,6 +48,23 @@ export function initDatabase() {
         error_count INTEGER DEFAULT 0,
         started_at TEXT NOT NULL,
         last_activity TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS task_queue (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT DEFAULT '',
+        priority TEXT NOT NULL DEFAULT 'normal',
+        required_capabilities TEXT NOT NULL DEFAULT '[]',
+        assigned_agent TEXT,
+        assigned_session TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        progress REAL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        started_at INTEGER,
+        completed_at INTEGER,
+        result TEXT,
+        error TEXT
       );
     `);
   } catch (err) {
@@ -135,4 +153,35 @@ export interface AgentStatsRow {
 export function loadAgentStats(): AgentStatsRow[] {
   if (!db) return [];
   return db.prepare('SELECT * FROM agent_stats ORDER BY started_at DESC').all() as AgentStatsRow[];
+}
+
+// ── Task Queue persistence (Phase 4) ──────────────────────────────────────
+
+export function saveTask(task: TaskRecord): void {
+  if (!db) return;
+  const stmt = db.prepare(`
+    INSERT OR REPLACE INTO task_queue
+      (id, title, description, priority, required_capabilities, assigned_agent,
+       assigned_session, status, progress, created_at, started_at, completed_at, result, error)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run(
+    task.id, task.title, task.description, task.priority,
+    JSON.stringify(task.requiredCapabilities), task.assignedAgent ?? null,
+    task.assignedSession ?? null, task.status, task.progress, task.createdAt,
+    task.startedAt ?? null, task.completedAt ?? null, task.result ?? null, task.error ?? null
+  );
+}
+
+export function loadTasks(): TaskRecord[] {
+  if (!db) return [];
+  const rows = db.prepare('SELECT * FROM task_queue ORDER BY created_at DESC').all() as any[];
+  return rows.map((r: any) => ({
+    id: r.id, title: r.title, description: r.description,
+    priority: r.priority, requiredCapabilities: JSON.parse(r.required_capabilities),
+    assignedAgent: r.assigned_agent, assignedSession: r.assigned_session,
+    status: r.status, progress: r.progress, createdAt: r.created_at,
+    startedAt: r.started_at, completedAt: r.completed_at,
+    result: r.result, error: r.error,
+  }));
 }

@@ -99,6 +99,24 @@ export function calculateHealth(stats: AgentStats): number {
   return Math.max(0, Math.min(100, score));
 }
 
+/** Task record in the orchestration queue */
+export interface TaskRecord {
+  id: string;
+  title: string;
+  description: string;
+  priority: 'low' | 'normal' | 'high';
+  requiredCapabilities: string[];
+  assignedAgent?: string;
+  assignedSession?: string;
+  status: 'pending' | 'queued' | 'running' | 'done' | 'failed';
+  progress: number;
+  createdAt: number;
+  startedAt?: number;
+  completedAt?: number;
+  result?: string;
+  error?: string;
+}
+
 /** Estimate cost from token count (simple: assume 60% input / 40% output split) */
 export function estimateCost(agentId: string, tokenCount: number): number {
   const pricing = AGENT_PRICING[agentId];
