@@ -5,11 +5,13 @@ import { setupIpcHandlers, setupDatabaseIpcHandlers } from './ipc-handlers.js';
 import { initDatabase, saveAgentStats } from './database.js';
 import { StatsCollector } from './stats-collector.js';
 import { NotifyCenter } from './notify-center.js';
+import { AgentWatchdog } from './agent-watchdog.js';
 
 let mainWindow: BrowserWindow | null = null;
 let daemonClient: DaemonClient | null = null;
 let statsCollector: StatsCollector | null = null;
 let notifyCenter: NotifyCenter | null = null;
+let watchdog: AgentWatchdog | null = null;
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
@@ -32,6 +34,23 @@ async function createWindow() {
   statsCollector = new StatsCollector();
   notifyCenter = new NotifyCenter();
 
+  // ── Phase 4: Agent Watchdog ────────────────────────────────────────────
+  watchdog = new AgentWatchdog({ checkIntervalMs: 30_000, unhealthyThreshold: 20 });
+
+  watchdog.on('agent-unhealthy', (event: any) => {
+    console.log(`[watchdog] Agent ${event.agentId} (${event.sessionId}) unhealthy: score ${event.health}`);
+    mainWindow?.webContents.send('agent-unhealthy', event);
+  });
+
+  watchdog.on('agent-restart', (event: any) => {
+    console.log(`[watchdog] Auto-restarting agent ${event.agentId} (${event.sessionId})`);
+    try {
+      daemonClient!.send({ type: 'kill', sessionId: event.sessionId });
+    } catch (err) {
+      console.error(`[watchdog] Restart failed:`, err);
+    }
+  });
+
   // Set up IPC bridge between renderer and daemon
   setupIpcHandlers(daemonClient, mainWindow, statsCollector, notifyCenter);
 
@@ -41,10 +60,16 @@ async function createWindow() {
       statsCollector.trackSession(msg.sessionId, msg.agent || '', '');
       statsCollector.updateStatus(msg.sessionId, 'running');
     }
+    if (watchdog && msg.sessionId) {
+      watchdog.register(msg.sessionId, msg.agent || '', { autoRestart: false });
+    }
   });
 
   daemonClient.on('output', (msg: any) => {
     if (!msg.sessionId || !msg.data) return;
+
+    // Update watchdog activity
+    if (watchdog) watchdog.updateActivity(msg.sessionId);
 
     // Parse tokens from output
     if (statsCollector) {
@@ -68,6 +93,9 @@ async function createWindow() {
   daemonClient.on('exit', (msg: any) => {
     if (statsCollector && msg.sessionId) {
       statsCollector.updateStatus(msg.sessionId, msg.code === 0 ? 'done' : 'error');
+    }
+    if (watchdog && msg.sessionId) {
+      watchdog.unregister(msg.sessionId);
     }
   });
 
@@ -97,6 +125,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+  watchdog?.stop();
   persistStats();
   statsCollector?.dispose();
   daemonClient?.destroy();
@@ -105,6 +134,7 @@ app.on('window-all-closed', () => {
 
 // Also kill daemon on app quit (e.g., F10 shortcut, macOS Cmd+Q)
 app.on('before-quit', () => {
+  watchdog?.stop();
   persistStats();
   statsCollector?.dispose();
   daemonClient?.destroy();
