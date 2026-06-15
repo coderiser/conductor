@@ -1,5 +1,10 @@
 node_modules/
-dist/
+out/
+dist/daemon/
+dist/common/
+dist/webui/
+dist/cli/
+release/
 coverage/
 *.sqlite
 *.sqlite-wal
@@ -8,13 +13,18 @@ coverage/
 .omc/
 .claude/
 
-# Tauri/Rust build
-web/src-tauri/target/
-web/src-tauri/gen/
-
 # User config
 agents.json
 conductor.db
+
+# Debug logs
+debug-spawn.log
+dev-restart.log
+dev-verify.log
+conductor-daemon.log
+
+# E2E screenshots
+e2e-screen-final.png
 
 # IDE
 .idea/
@@ -22,8 +32,11 @@ conductor.db
 
 # Screenshots
 web/screenshots/
-/.claude/
-/.idea/
-/.omc/
-/.superpowers/
-/docs/superpowers/
+
+# Temporary dev scripts at repo root
+_*.js
+check-*.js
+kill-*.js
+restart-*.js
+start-*.js
+test-*.js

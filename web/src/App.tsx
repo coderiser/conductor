@@ -5,10 +5,23 @@ import { Sidebar, type SessionMeta, type LogEntry } from './components/Sidebar';
 import { useSessionStore } from './store/sessions';
 import { pty } from './lib/tauri-ipc';
 
-interface PanelEntry { id: string; agent: string; dockId: string; ptyId?: string; cwd: string; createdAt: number; running: boolean; status: string; gitBranch?: string; needsAttention: boolean; exited: boolean; }
+interface PanelEntry { id: string; agent: string; dockId: string; ptyId?: string; cwd: string; createdAt: number; running: boolean; status: string; gitBranch?: string; needsAttention: boolean; exited: boolean; resumeId?: string; isRestored?: boolean; }
 let nextN = 1;
-
+const genUUID = () => crypto.randomUUID?.() || 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:r&0x3|0x8).toString(16); });
 const now = () => new Date().toLocaleTimeString('en-US', { hour12: false });
+
+// Save panels to SQLite on every change (real-time persistence)
+function savePanelsToDb(panels: PanelEntry[]) {
+  invoke('save_layout', {
+    dockviewJson: '[]',
+    sessions: panels.map(p => {
+      let sid = (p.agent === 'cmd' || p.agent === 'cmd.exe') ? '' : (p.resumeId || '');
+      if (p.agent === 'opencode' && sid && !sid.startsWith('ses_')) sid = '';
+      return { id: p.dockId, agent: p.agent, cwd: p.cwd === '.' ? '' : p.cwd, agent_session_id: sid };
+    }),
+    windowWidth: window.innerWidth, windowHeight: window.innerHeight,
+  }).catch((e) => { console.error('[savePanelsToDb]', e); });
+}
 
 export default function App() {
   const [panels, setPanels] = useState<PanelEntry[]>([]);
@@ -24,46 +37,42 @@ export default function App() {
     setLogs((prev) => [...prev.slice(-99), { time: now(), text, color }]);
   }, []);
 
-  // Startup: restore saved session or create default
+  // Startup: load from SQLite, or create default
   useEffect(() => {
     (async () => {
       try {
         const layout = await invoke<any>('load_layout');
         if (layout?.sessions?.length > 0) {
-          const restored: PanelEntry[] = layout.sessions.map((s: any) => ({
-            id: `term-${nextN++}`, agent: s.agent, dockId: `term-${nextN}`,
-            cwd: s.cwd || '.', createdAt: Date.now(), running: true,
-            status: 'starting', needsAttention: false, exited: false,
-          }));
-          restored.forEach((r) => add({ id: `S${nextN}`, agent: r.agent, dockviewId: r.dockId, ptyId: '' }));
+          const restored: PanelEntry[] = layout.sessions.map((s: any) => {
+            const id = `term-${nextN++}`;
+            return { id, dockId: id, agent: s.agent, cwd: s.cwd || '.', createdAt: Date.now(), running: true,
+              status: 'starting', needsAttention: false, exited: false,
+              resumeId: s.agent_session_id || undefined,
+              isRestored: !!(s.agent_session_id) };
+          });
+          restored.forEach((r) => add({ id: `S${nextN++}`, agent: r.agent, dockviewId: r.dockId, ptyId: '' }));
           setPanels(restored);
           addLog(`Restored ${restored.length} session(s)`, 'var(--running)');
           return;
         }
       } catch {}
-      const id = `term-${nextN++}`;
-      setPanels([{ id, agent: 'cmd.exe', dockId: id, cwd: '.', createdAt: Date.now(), running: true, status: 'starting', needsAttention: false, exited: false }]);
-      add({ id: 'S1', agent: 'cmd.exe', dockviewId: id, ptyId: '' });
-      addLog('cmd.exe started', 'var(--running)');
+      createDefault();
     })();
   }, []);
 
-  // Save layout on Tauri window close (use ref to capture latest panels)
-  const panelsRef = useRef(panels);
-  panelsRef.current = panels;
+  const createDefault = () => {
+    const id = `term-${nextN++}`;
+    const rid = genUUID();
+    setPanels([{ id, agent: 'cmd.exe', dockId: id, cwd: '.', createdAt: Date.now(), running: true, status: 'starting', needsAttention: false, exited: false, resumeId: rid }]);
+    add({ id: 'S1', agent: 'cmd.exe', dockviewId: id, ptyId: '' });
+    addLog('cmd.exe started', 'var(--running)');
+  };
 
+  // Auto-save to SQLite on every change (immediate — SQLite writes are fast)
   useEffect(() => {
-    import('@tauri-apps/api/window').then(({ getCurrentWindow }) => {
-      getCurrentWindow().onCloseRequested(async () => {
-        const p = panelsRef.current;
-        await invoke('save_layout', {
-          dockviewJson: '[]',
-          sessions: p.map(pp => ({ id: pp.dockId, agent: pp.agent, cwd: pp.cwd })),
-          windowWidth: window.innerWidth, windowHeight: window.innerHeight,
-        });
-      });
-    }).catch(() => {});
-  }, []);
+    if (panels.length === 0) return;
+    savePanelsToDb(panels);
+  }, [panels]);
 
   // Stats
   useEffect(() => {
@@ -76,10 +85,11 @@ export default function App() {
   const addTerminal = useCallback((agent: string, cwd?: string) => {
     const id = `term-${nextN++}`;
     const dir = cwd || '.';
-    setPanels((prev) => [...prev, { id, agent, dockId: id, cwd: dir, createdAt: Date.now(), running: true, status: 'starting', needsAttention: false, exited: false }]);
+    const resumeId = genUUID();
+    setPanels((prev) => [...prev, { id, agent, dockId: id, cwd: dir, createdAt: Date.now(), running: true, status: 'starting', needsAttention: false, exited: false, resumeId }]);
     setActiveIdx(panels.length);
     add({ id: `S${nextN}`, agent, dockviewId: id });
-    addLog(`${agent} started [cwd: ${dir}]`, 'var(--running)');
+    addLog(`${agent} started [sid: ${resumeId.slice(0, 8)}]`, 'var(--running)');
   }, [panels.length, add, addLog]);
 
   const killCurrent = useCallback(() => {
@@ -94,7 +104,7 @@ export default function App() {
     sessions.forEach((s) => { if (s.ptyId) pty.write(s.ptyId, data + '\r\n'); });
   }, [sessions]);
 
-  // Grid layout
+  // Dynamic grid
   const n = panels.length;
   const cols = n <= 1 ? 1 : n <= 5 ? 2 : 3;
   const rem = n % cols;
@@ -108,31 +118,31 @@ export default function App() {
   interface Cell { idx: number; row: number; colStart: number; colSpan: number; }
   const cells: Cell[] = [];
   if (rem === 1 && baseRows > 1) {
-    const topCells = (baseRows - 1) * cols;
-    for (let i = 0; i < topCells; i++) { cells.push({ idx: i, row: Math.floor(i / cols), colStart: (i % cols) * cellSpan + 1, colSpan: cellSpan }); }
-    cells.push({ idx: topCells, row: baseRows - 1, colStart: 1, colSpan: gridCols });
-    for (let i = topCells + 1; i < n; i++) { const bi = i - (topCells + 1); cells.push({ idx: i, row: baseRows, colStart: bi * cellSpan + 1, colSpan: cellSpan }); }
+    const tc = (baseRows - 1) * cols;
+    for (let i = 0; i < tc; i++) cells.push({ idx: i, row: Math.floor(i / cols), colStart: (i % cols) * cellSpan + 1, colSpan: cellSpan });
+    cells.push({ idx: tc, row: baseRows - 1, colStart: 1, colSpan: gridCols });
+    for (let i = tc + 1; i < n; i++) cells.push({ idx: i, row: baseRows, colStart: (i - tc - 1) * cellSpan + 1, colSpan: cellSpan });
   } else if (hasSpan && rem === 1) {
     const fc = baseRows * cols;
-    for (let i = 0; i < fc; i++) { cells.push({ idx: i, row: Math.floor(i / cols), colStart: (i % cols) * cellSpan + 1, colSpan: cellSpan }); }
+    for (let i = 0; i < fc; i++) cells.push({ idx: i, row: Math.floor(i / cols), colStart: (i % cols) * cellSpan + 1, colSpan: cellSpan });
     cells.push({ idx: fc, row: baseRows, colStart: 1, colSpan: gridCols });
   } else if (fracBottom) {
     const fc = baseRows * cols;
-    for (let i = 0; i < fc; i++) { cells.push({ idx: i, row: Math.floor(i / cols), colStart: (i % cols) * cellSpan + 1, colSpan: cellSpan }); }
-    for (let i = fc; i < n; i++) { const bi = i - fc; const s = gridCols / rem; cells.push({ idx: i, row: baseRows, colStart: bi * s + 1, colSpan: s }); }
+    for (let i = 0; i < fc; i++) cells.push({ idx: i, row: Math.floor(i / cols), colStart: (i % cols) * cellSpan + 1, colSpan: cellSpan });
+    for (let i = fc; i < n; i++) cells.push({ idx: i, row: baseRows, colStart: (i - fc) * (gridCols / rem) + 1, colSpan: gridCols / rem });
   } else {
-    for (let i = 0; i < n; i++) { cells.push({ idx: i, row: Math.floor(i / cols), colStart: (i % cols) * cellSpan + 1, colSpan: cellSpan }); }
+    for (let i = 0; i < n; i++) cells.push({ idx: i, row: Math.floor(i / cols), colStart: (i % cols) * cellSpan + 1, colSpan: cellSpan });
   }
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.key >= 'F1' && e.key <= 'F9') { e.preventDefault(); const idx = parseInt(e.key[1]) - 1; if (idx < panels.length) setActiveIdx(idx); }
-      if (e.key === 'F10') { e.preventDefault(); window.close(); }
+      if (e.key === 'F10') { e.preventDefault(); import('@tauri-apps/api/window').then(({ getCurrentWindow }) => getCurrentWindow().close()); }
       if (e.ctrlKey && e.key === 'n') { e.preventDefault(); addTerminal('cmd.exe'); }
       if (e.ctrlKey && e.key === 'w') { e.preventDefault(); killCurrent(); }
     };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
+    window.addEventListener('keydown', h, { capture: true });
+    return () => window.removeEventListener('keydown', h, { capture: true });
   }, [addTerminal, killCurrent, panels.length]);
 
   return (
@@ -147,11 +157,14 @@ export default function App() {
           return (
             <div key={p.dockId} onClick={() => setActiveIdx(c.idx)}
               style={{ gridRow: c.row + 1, gridColumn: `${c.colStart} / span ${c.colSpan}`, border: c.idx === activeIdx ? '2px solid var(--accent)' : (p.needsAttention ? '2px solid var(--accent)' : '1px solid var(--hairline)'), position: 'relative', overflow: 'hidden', minWidth: 0, minHeight: 0 }}>
-              <TerminalPanel agent={p.agent} cwd={p.cwd !== '.' ? p.cwd : undefined}
+              <TerminalPanel agent={p.agent} cwd={p.cwd !== '.' ? p.cwd : undefined} resumeId={p.resumeId} isRestore={!!p.isRestored}
                 onFocus={() => setActiveIdx(c.idx)}
+                onSessionId={(sid) => {
+                  setPanels((prev) => prev.map((pp) => pp.dockId === p.dockId ? { ...pp, resumeId: sid } : pp));
+                }}
                 onReady={(info) => {
                   updateId(p.dockId, info.id);
-                  setPanels((prev) => prev.map((pp) => pp.dockId === p.dockId ? { ...pp, ptyId: info.id, cwd: info.cwd || pp.cwd, status: 'running', needsAttention: false } : pp));
+                  setPanels((prev) => prev.map((pp) => pp.dockId === p.dockId ? { ...pp, ptyId: info.id, cwd: info.cwd || pp.cwd, status: 'running', needsAttention: false, resumeId: info.agent_session_id || pp.resumeId } : pp));
                   invoke('get_git_status', { path: info.cwd || p.cwd }).then((git: any) => {
                     if (git.branch) setPanels((prev) => prev.map((pp) => pp.dockId === p.dockId ? { ...pp, gitBranch: git.branch + (git.dirty ? ' *' : '') } : pp));
                   }).catch(() => {});

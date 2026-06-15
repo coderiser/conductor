@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { pty } from '../lib/tauri-ipc';
-import { useSessionStore } from '../store/sessions';
+
+
 
 export interface SessionMeta { id: string; agent: string; cwd: string; branch?: string; gitBranch?: string; elapsed: number; running: boolean; status?: string; needsAttention?: boolean; exited?: boolean; }
 export interface LogEntry { time: string; text: string; color: string; }
@@ -22,7 +22,6 @@ export function Sidebar({ onAddTerminal, onKillCurrent, onBroadcast, stats, sess
   const [broadcast, setBroadcast] = useState(false);
   const [input, setInput] = useState('');
   const [cwdInput, setCwdInput] = useState('');
-  const storeSessions = useSessionStore((s) => s.sessions);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const logEndRef = useRef<HTMLDivElement>(null);
 
@@ -42,7 +41,6 @@ export function Sidebar({ onAddTerminal, onKillCurrent, onBroadcast, stats, sess
   const handleSend = () => {
     if (!input.trim()) return;
     if (broadcast) {
-      storeSessions.forEach((s: any) => pty.write(s.ptyId || s.id, input + '\r\n'));
       onBroadcast(input);
     }
     setInput('');
