@@ -30,7 +30,7 @@ jobs:
         run: npm run build
 
       - name: Package
-        run: npm run package
+        run: npm run package -- --publish=never
 
       - name: Upload artifacts
         if: startsWith(github.ref, 'refs/tags/')
