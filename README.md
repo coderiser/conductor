@@ -2,7 +2,7 @@
 
 Windows Agent Workbench — 基于 Electron 的多 Agent 终端工作台。
 
-![Screenshot](docs/images/screenshot.jpg)
+![Screenshot](docs/images/screenshot.png)
 
 ## 功能全景
 
